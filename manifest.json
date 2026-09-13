@@ -1,0 +1,10 @@
+{
+  "name": "P377Y_Tailwind",
+  "version_number": "0.1.0",
+  "website_url": "",
+  "description": "Server-synced Valheim sailing tweaks: tailwind lock, matching wind indicator, larger ship exploration radius, and configurable forward/reverse rowing.",
+  "dependencies": [
+    "denikson-BepInExPack_Valheim-5.4.2350",
+    "ValheimModding-Jotunn-2.30.0"
+  ]
+}
