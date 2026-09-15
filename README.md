@@ -116,16 +116,20 @@ Default: `2`
 
 ## Multiplayer
 
-Smooth Sailing is intended to support both single-player and multiplayer.
+Smooth Sailing supports both single-player and multiplayer.
 
 For multiplayer, install the mod on:
 
 - The dedicated server, if one is being used.
 - Every player connecting to the server.
 
-Gameplay configuration is synchronized using Jotunn. Server administrators control the synchronized settings.
+Gameplay configuration is synchronized using Jotunn's AdminOnly configuration system, allowing the server administrator to control synchronized settings for all players.
 
 Some Smooth Sailing functionality is necessarily performed client-side, including map exploration and local wind-related behavior.
+
+Favorable-wind ship behavior is designed to remain consistent when different players take control of the ship, including situations where the active captain and the ship's network owner are different players. Favorable sail visuals are also applied across clients.
+
+Multiplayer captain switching, network ownership behavior, and sail visuals are still being actively tested.
 
 ## Reporting Bugs
 
