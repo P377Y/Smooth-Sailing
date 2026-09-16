@@ -20,9 +20,10 @@
       <HintPath>$(ValheimManaged)\assembly_utils.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="MagicaClothV2">
-      <HintPath>..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\MagicaClothV2.dll</HintPath>
-    </Reference>
+	  <Reference Include="MagicaClothV2">
+		  <HintPath>$(ValheimManaged)\MagicaClothV2.dll</HintPath>
+		  <Private>false</Private>
+	  </Reference>
     <Reference Include="UnityEngine">
       <HintPath>$(ValheimManaged)\UnityEngine.dll</HintPath>
       <Private>false</Private>
