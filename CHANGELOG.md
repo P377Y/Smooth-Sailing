@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+
+- Added configurable sailing wind intensity with three modes:
+  - **Vanilla** — uses Valheim's current environmental wind intensity.
+  - **Minimum** — enforces a configurable minimum sailing wind intensity while preserving stronger natural wind.
+  - **Maximum** — always uses maximum sailing wind intensity.
+- Added configurable **Minimum Wind Intensity**, defaulting to `0.5`.
+- Added ship-local MagicaCloth wind handling so sail cloth visually responds to Smooth Sailing's effective wind strength.
+
+### Improved
+
+- Ship propulsion now uses Smooth Sailing's effective wind direction and intensity together in the sail-force calculation.
+- Sail cloth strength now matches the effective sailing wind instead of remaining dependent on the world's current wind intensity.
+- Sailing HUD favorable-wind state now reflects the effective Smooth Sailing wind used for propulsion.
+- Wind direction, wind intensity, propulsion, sail orientation, sail cloth, and the sailing HUD now use a consistent effective sailing-wind model.
+- Valheim's true environmental wind remains unchanged outside Smooth Sailing's ship-specific sailing behavior.
+- The minimap wind arrow continues to display the true environmental wind.
+- Offset modes continue to default to 60°.
+
+### Fixed
+
+- Fixed Maximum wind intensity producing full-speed calculations while the physical sail could remain visually flat during low environmental wind.
+- Fixed ships losing sail propulsion when sailing into the true environmental headwind even though Smooth Sailing was supplying a favorable effective wind.
+- Fixed the sailing wind indicator appearing unfavorable when the effective Smooth Sailing wind was favorable.
+- Fixed residual environmental wind direction leaking into the final sail-force vector and causing stalled or unintended lateral movement in Dead Astern mode.
+
+### Testing
+
+Version 0.3.0 has been tested with:
+
+- Vanilla, Minimum, and Maximum wind-intensity modes.
+- Dead Astern, positive offset, negative offset, and Off sailing modes.
+- Maximum effective wind while sailing directly into the true environmental headwind.
+- Sail-cloth response at different environmental wind intensities.
+- Sailing HUD and minimap wind-indicator behavior.
+
+Additional multiplayer and dedicated-server testing is welcome, particularly around captain changes, network ownership, and sail visuals across clients.
+
+Please report issues at:
+
+https://github.com/P377Y/Smooth-Sailing/issues
+
+
 ## 0.2.0
 
 ### Added

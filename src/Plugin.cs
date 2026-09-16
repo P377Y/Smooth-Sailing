@@ -4,7 +4,9 @@ using HarmonyLib;
 using Jotunn;
 using Jotunn.Managers;
 using Jotunn.Utils;
+using MagicaCloth2;
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using static SmoothSailing.Plugin;
 
@@ -17,7 +19,7 @@ namespace SmoothSailing
     {
         public const string ModGuid = "p377y.valheim.smoothsailing";
         public const string ModName = "Smooth Sailing";
-        public const string ModVersion = "0.2.0";
+        public const string ModVersion = "0.3.0";
 
         internal static Plugin Instance;
         internal static BepInEx.Logging.ManualLogSource ModLog;
@@ -30,12 +32,25 @@ namespace SmoothSailing
             NegativeOffset = 3
         }
 
+        internal enum WindIntensityMode
+        {
+            Vanilla = 0,
+            Minimum = 1,
+            Maximum = 2
+        }
+
         internal static ConfigEntry<TailwindMode> TailwindModeSetting;
         internal static ConfigEntry<float> OffsetAngle;
+        internal static ConfigEntry<WindIntensityMode> WindIntensityModeSetting;
+        internal static ConfigEntry<float> MinimumWindIntensity;
         internal static ConfigEntry<KeyboardShortcut> AdminToggleKey;
         internal static ConfigEntry<float> ShipExploreRadiusMultiplier;
         internal static ConfigEntry<float> ForwardRowMultiplier;
         internal static ConfigEntry<float> ReverseRowMultiplier;
+
+        // Local MagicaCloth wind zones used only around ship sails.
+        private static readonly Dictionary<Ship, MagicaWindZone> ShipWindZones =
+            new Dictionary<Ship, MagicaWindZone>();
 
         private Harmony _harmony;
 
@@ -54,6 +69,14 @@ namespace SmoothSailing
         private void OnDestroy()
         {
             _harmony?.UnpatchSelf();
+
+            foreach (KeyValuePair<Ship, MagicaWindZone> pair in ShipWindZones)
+            {
+                if (pair.Value != null)
+                    Destroy(pair.Value.gameObject);
+            }
+
+            ShipWindZones.Clear();
         }
 
         private void BindConfig()
@@ -92,6 +115,28 @@ namespace SmoothSailing
                 new ConfigDescription(
                     "Wind angle used by PositiveOffset and NegativeOffset. 0 = dead astern; 60 is near peak vanilla sail efficiency.",
                     new AcceptableValueRange<float>(0f, 90f),
+                    admin
+                )
+            );
+
+            WindIntensityModeSetting = Config.Bind(
+                "Tailwind",
+                "Wind Intensity Mode",
+                WindIntensityMode.Vanilla,
+                new ConfigDescription(
+                    "Sailing wind intensity while a favorable-wind mode is active: Vanilla uses world intensity, Minimum enforces the configured minimum, Maximum always uses full intensity.",
+                    null,
+                    admin
+                )
+            );
+
+            MinimumWindIntensity = Config.Bind(
+                "Tailwind",
+                "Minimum Wind Intensity",
+                0.5f,
+                new ConfigDescription(
+                    "Minimum sailing wind intensity used when Wind Intensity Mode is Minimum. Natural wind stronger than this value is preserved.",
+                    new AcceptableValueRange<float>(0f, 1f),
                     admin
                 )
             );
@@ -189,6 +234,188 @@ namespace SmoothSailing
             ) * ship.transform.forward;
         }
 
+        internal static float GetEffectiveWindIntensity(float worldIntensity)
+        {
+            if (!IsTailwindEnabled())
+                return worldIntensity;
+
+            switch (WindIntensityModeSetting.Value)
+            {
+                case WindIntensityMode.Minimum:
+                    return Mathf.Max(worldIntensity, MinimumWindIntensity.Value);
+                case WindIntensityMode.Maximum:
+                    return 1f;
+                default:
+                    return worldIntensity;
+            }
+        }
+
+        internal static MagicaWindZone GetOrCreateShipWindZone(Ship ship)
+        {
+            if (ship == null)
+                return null;
+
+            MagicaWindZone existing;
+            if (ShipWindZones.TryGetValue(ship, out existing) && existing != null)
+                return existing;
+
+            MagicaCloth sailCloth = ship.GetComponentInChildren<MagicaCloth>(true);
+            if (sailCloth == null)
+                return null;
+
+            GameObject zoneObject = new GameObject("SmoothSailing_SailWindZone");
+            zoneObject.transform.SetParent(sailCloth.transform, false);
+            zoneObject.transform.localPosition = Vector3.zero;
+            zoneObject.transform.localRotation = Quaternion.identity;
+            zoneObject.transform.localScale = Vector3.one;
+
+            MagicaWindZone zone = zoneObject.AddComponent<MagicaWindZone>();
+            zone.mode = MagicaWindZone.Mode.BoxDirection;
+            zone.size = new Vector3(12f, 12f, 4f);
+            zone.main = 0f;
+            zone.turbulence = 1f;
+            zone.isAddition = false;
+
+            ShipWindZones[ship] = zone;
+            return zone;
+        }
+
+        internal static void UpdateShipWindZone(Ship ship)
+        {
+            if (ship == null)
+                return;
+
+            MagicaWindZone zone;
+            ShipWindZones.TryGetValue(ship, out zone);
+
+            if (!IsSailingShip(ship))
+            {
+                if (zone != null)
+                    zone.enabled = false;
+                return;
+            }
+
+            zone = GetOrCreateShipWindZone(ship);
+            if (zone == null)
+                return;
+
+            if (!zone.enabled)
+                zone.enabled = true;
+
+            zone.SetWindDirection(GetDesiredWindDirection(ship));
+
+            float worldIntensity = EnvMan.instance != null
+                ? EnvMan.instance.GetWindIntensity()
+                : 0f;
+            float effectiveIntensity = GetEffectiveWindIntensity(worldIntensity);
+
+            // Same conversion Valheim uses for EnvMan.m_clothWindZone.
+            zone.main = Mathf.Pow(effectiveIntensity, 2f) * 100f;
+        }
+
+        internal static void RemoveShipWindZone(Ship ship)
+        {
+            if (ship == null)
+                return;
+
+            MagicaWindZone zone;
+            if (!ShipWindZones.TryGetValue(ship, out zone))
+                return;
+
+            ShipWindZones.Remove(ship);
+            if (zone != null)
+                Destroy(zone.gameObject);
+        }
+
+        private static readonly System.Reflection.FieldInfo SailForceFactorField =
+            AccessTools.Field(typeof(Ship), "m_sailForceFactor");
+
+        private static readonly System.Reflection.FieldInfo SailForceField =
+            AccessTools.Field(typeof(Ship), "m_sailForce");
+
+        private static readonly System.Reflection.FieldInfo WindChangeVelocityField =
+            AccessTools.Field(typeof(Ship), "m_windChangeVelocity");
+
+        internal static bool TryCalculateSmoothSailForce(
+            Ship ship,
+            float sailSize,
+            float dt,
+            out Vector3 result)
+        {
+            result = Vector3.zero;
+
+            if (!IsTailwindEnabled() || ship == null ||
+                SailForceFactorField == null ||
+                SailForceField == null ||
+                WindChangeVelocityField == null)
+                return false;
+
+            // Only replace vanilla propulsion on the client responsible for
+            // simulating this sailing ship.
+            if (!IsLocallyControlledSailingShip(ship) &&
+                !IsLocallyOwnedSailingShip(ship))
+                return false;
+
+            Vector3 windDir = GetDesiredWindDirection(ship).normalized;
+
+            float worldIntensity =
+                EnvMan.instance != null
+                    ? EnvMan.instance.GetWindIntensity()
+                    : 0f;
+
+            float effectiveIntensity =
+                GetEffectiveWindIntensity(worldIntensity);
+
+            float intensityFactor =
+                Mathf.Lerp(0.25f, 1f, effectiveIntensity);
+
+            float dot =
+                Vector3.Dot(windDir, -ship.transform.forward);
+
+            float angleEfficiency =
+                Mathf.Lerp(0.7f, 1f, 1f - Utils.Abs(dot));
+
+            float headwindCutoff =
+                1f - Utils.LerpStep(0.75f, 0.8f, dot);
+
+            float windAngleFactor =
+                angleEfficiency * headwindCutoff * intensityFactor;
+
+            float sailForceFactor =
+                (float)SailForceFactorField.GetValue(ship);
+
+            Vector3 currentSailForce =
+                (Vector3)SailForceField.GetValue(ship);
+
+            Vector3 windChangeVelocity =
+                (Vector3)WindChangeVelocityField.GetValue(ship);
+
+            Vector3 combined =
+                windDir + ship.transform.forward;
+
+            Vector3 target =
+                combined.sqrMagnitude > 0.000001f
+                    ? combined.normalized *
+                      (windAngleFactor * sailForceFactor * sailSize)
+                    : Vector3.zero;
+
+            currentSailForce =
+                Vector3.SmoothDamp(
+                    currentSailForce,
+                    target,
+                    ref windChangeVelocity,
+                    1f,
+                    99f,
+                    dt
+                );
+
+            SailForceField.SetValue(ship, currentSailForce);
+            WindChangeVelocityField.SetValue(ship, windChangeVelocity);
+
+            result = currentSailForce;
+            return true;
+        }
+
         internal static bool IsLocallyControlledSailingShip(Ship ship)
         {
             if (!IsTailwindEnabled() || ship == null || Player.m_localPlayer == null)
@@ -271,16 +498,8 @@ namespace SmoothSailing
 
             _toggleWasDown = true;
 
-            if (ZNet.instance == null)
-            {
-                ModLog.LogInfo("Smooth Sailing: ZNet.instance is null");
-                return;
-            }
-
-            bool isAdmin = SynchronizationManager.Instance.PlayerIsAdmin;
-
-
-            if (!isAdmin)
+            if (ZNet.instance == null ||
+                !SynchronizationManager.Instance.PlayerIsAdmin)
             {
                 __instance.Message(
                     MessageHud.MessageType.TopLeft,
@@ -381,6 +600,34 @@ namespace SmoothSailing
         }
     }
 
+    [HarmonyPatch(typeof(Ship), nameof(Ship.GetWindAngleFactor))]
+    internal static class ShipGetWindAngleFactorPatch
+    {
+        private static void Postfix(Ship __instance, ref float __result)
+        {
+            if (!Plugin.IsTailwindEnabled() || __instance == null)
+                return;
+
+            // Apply only while this client is actually responsible for the
+            // sailing ship: either the local captain or the network owner.
+            if (!Plugin.IsLocallyControlledSailingShip(__instance) &&
+                !Plugin.IsLocallyOwnedSailingShip(__instance))
+            {
+                return;
+            }
+
+            // Reproduce Valheim's vanilla GetWindAngleFactor() math, but use
+            // Smooth Sailing's effective wind direction instead of EnvMan's
+            // environmental wind.
+            Vector3 windDir = Plugin.GetDesiredWindDirection(__instance);
+            float dot = Vector3.Dot(windDir, -__instance.transform.forward);
+            float angleEfficiency = Mathf.Lerp(0.7f, 1f, 1f - Utils.Abs(dot));
+            float headwindCutoff = 1f - Utils.LerpStep(0.75f, 0.8f, dot);
+
+            __result = angleEfficiency * headwindCutoff;
+        }
+    }
+
     [HarmonyPatch(typeof(Ship), nameof(Ship.GetWindAngle))]
     internal static class ShipGetWindAnglePatch
     {
@@ -410,6 +657,61 @@ namespace SmoothSailing
         }
     }
 
+
+    // ------------------------------------------------------------
+    // SAILING WIND INTENSITY
+    // ------------------------------------------------------------
+
+    internal static class ShipSailForceScope
+    {
+        internal static bool CalculatingSailForce;
+        internal static Ship CurrentShip;
+    }
+
+    [HarmonyPatch(typeof(Ship), "GetSailForce")]
+    internal static class ShipGetSailForceScopePatch
+    {
+        private static bool Prefix(
+            Ship __instance,
+            float sailSize,
+            float dt,
+            ref Vector3 __result)
+        {
+            ShipSailForceScope.CalculatingSailForce = true;
+            ShipSailForceScope.CurrentShip = __instance;
+
+            // When Smooth Sailing is active, calculate the complete vanilla-style
+            // sail force ourselves using the effective direction and intensity.
+            // Returning false skips vanilla GetSailForce(), preventing real world
+            // wind from leaking into the final target force vector.
+            if (Plugin.TryCalculateSmoothSailForce(
+                    __instance,
+                    sailSize,
+                    dt,
+                    out Vector3 smoothResult))
+            {
+                __result = smoothResult;
+                ShipSailForceScope.CalculatingSailForce = false;
+                ShipSailForceScope.CurrentShip = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        private static void Postfix()
+        {
+            ShipSailForceScope.CalculatingSailForce = false;
+            ShipSailForceScope.CurrentShip = null;
+        }
+
+        private static Exception Finalizer(Exception __exception)
+        {
+            ShipSailForceScope.CalculatingSailForce = false;
+            ShipSailForceScope.CurrentShip = null;
+            return __exception;
+        }
+    }
 
     // ------------------------------------------------------------
     // ROWING SPEED
@@ -556,6 +858,10 @@ namespace SmoothSailing
             float dt
         )
         {
+            // Keep the sail-local cloth zone synchronized, and disable it
+            // immediately whenever Smooth Sailing/active sailing is off.
+            Plugin.UpdateShipWindZone(__instance);
+
             if (!Plugin.IsTailwindEnabled())
                 return;
 
@@ -592,6 +898,16 @@ namespace SmoothSailing
     }
 
 
+    [HarmonyPatch(typeof(Ship), "OnDestroy")]
+    internal static class ShipOnDestroyPatch
+    {
+        private static void Prefix(Ship __instance)
+        {
+            Plugin.RemoveShipWindZone(__instance);
+        }
+    }
+
+
     // ------------------------------------------------------------
     // LOCAL WIND DIRECTION
     //
@@ -609,8 +925,22 @@ namespace SmoothSailing
             ref Vector3 __result
         )
         {
-            // Minimap.UpdateWindMarker already received the real EnvMan.m_wind
-            // from the original GetWindDir(). Do not overwrite that result.
+            // Propulsion gets first priority. GetSailForce() reads wind direction
+            // directly and GetWindAngleFactor() reads it again, so force both calls
+            // to use the exact same Smooth Sailing direction for the ship currently
+            // being simulated. This is independent of local captain/network ownership.
+            if (ShipSailForceScope.CalculatingSailForce &&
+                Plugin.IsTailwindEnabled() &&
+                ShipSailForceScope.CurrentShip != null)
+            {
+                __result =
+                    Plugin.GetDesiredWindDirection(
+                        ShipSailForceScope.CurrentShip
+                    );
+                return;
+            }
+
+            // The minimap must continue to show true environmental wind.
             if (MinimapRealWindScope.UpdatingWindMarker)
                 return;
 

@@ -2,7 +2,7 @@
 
 Smooth Sailing is a lightweight, configurable sailing quality-of-life mod for Valheim 1.0, built for BepInEx + Jotunn.
 
-It improves sailing without replacing the core ship experience, with selectable favorable-wind modes, improved rowing, and increased map exploration while traveling by ship.
+It improves sailing without replacing the core ship experience, with selectable favorable-wind modes, configurable sailing wind intensity, improved rowing, and increased map exploration while traveling by ship.
 
 ## Features
 
@@ -25,16 +25,30 @@ A server administrator can cycle the modes in-game using the configured Admin To
 
 The selected mode is synchronized so participating clients use the same sailing behavior.
 
+### Sailing Wind Intensity
+
+Smooth Sailing can independently control the effective wind intensity used for sailing while a favorable-wind mode is active.
+
+Three intensity modes are available:
+
+- **Vanilla** - Uses Valheim's current environmental wind intensity.
+- **Minimum** - Enforces a configurable minimum sailing wind intensity while preserving stronger natural wind.
+- **Maximum** - Always uses maximum sailing wind intensity.
+
+The default intensity mode is **Vanilla**, preserving Valheim's normal variation in wind strength unless an administrator chooses otherwise.
+
 ### Accurate Sailing Visuals
 
 When a favorable-wind mode is active:
 
-- The physical sail responds to the effective sailing wind.
-- The circular sailing wind indicator displays the effective wind direction.
+- The physical sail responds to the effective sailing wind direction.
+- Sail cloth strength reflects the effective Smooth Sailing wind intensity.
+- The circular sailing wind indicator displays the effective wind direction and favorable-wind state.
 - Positive and negative offsets appear on their corresponding sides.
 - The minimap wind arrow remains tied to Valheim's true environmental wind.
+- Valheim's world/environmental wind remains unchanged.
 
-This allows the sailing HUD to represent the wind actually affecting the ship while preserving the minimap's normal world-wind information.
+This allows the ship's propulsion, sail, and sailing HUD to represent the effective wind actually affecting the ship while preserving normal world-wind information outside the sailing system.
 
 ### Improved Rowing
 
@@ -89,6 +103,8 @@ Enabled = true
 [Tailwind]
 Tailwind Mode = DeadAstern
 Offset Angle = 60
+Wind Intensity Mode = Vanilla
+Minimum Wind Intensity = 0.5
 Admin Toggle Key = K
 
 [Exploration]
@@ -131,6 +147,26 @@ Controls the angle used by the PositiveOffset and NegativeOffset modes.
 `0` represents dead astern. The default is `60` degrees.
 
 Default: `60`
+
+**Wind Intensity Mode**
+
+Controls the effective wind strength used for ship propulsion and sail visuals while a favorable-wind mode is active.
+
+Available values:
+
+- `Vanilla` - Uses the current environmental wind intensity.
+- `Minimum` - Uses at least the configured Minimum Wind Intensity, while preserving stronger natural wind.
+- `Maximum` - Uses maximum wind intensity.
+
+Default: `Vanilla`
+
+**Minimum Wind Intensity**
+
+Sets the minimum effective sailing wind intensity when Wind Intensity Mode is set to `Minimum`.
+
+The value ranges from `0` to `1`. Natural wind stronger than this setting is preserved.
+
+Default: `0.5`
 
 **Admin Toggle Key**
 
@@ -190,7 +226,9 @@ Smooth Sailing expands on that concept with:
 - Both positive and negative configurable offsets.
 - Synchronized sailing behavior for participating clients.
 - Physical sail and sailing-indicator integration.
-- Preservation of Valheim's true environmental wind on the minimap.
+- Configurable Vanilla, Minimum, and Maximum sailing wind intensity.
+- Sail-cloth visuals that reflect the effective sailing wind strength.
+- Preservation of Valheim's true environmental wind on the minimap and outside the sailing system.
 
 HelmWind:
 
@@ -232,6 +270,7 @@ When reporting a multiplayer or sailing issue, please include:
 - Whether you were the ship captain when the problem occurred
 - Ship type and sail setting
 - Selected Smooth Sailing wind mode
+- Selected Wind Intensity Mode and Minimum Wind Intensity, when relevant
 - Steps to reproduce the problem
 - Your BepInEx `LogOutput.log` when possible
 
@@ -249,7 +288,7 @@ The compiled mod will be generated at:
 
 `bin/Release/net472/SmoothSailing.dll`
 
-The project requires references to the Valheim, BepInEx, Harmony, and Jotunn assemblies.
+The project requires references to the Valheim, BepInEx, Harmony, Jotunn, and MagicaCloth2 assemblies.
 
 ## License
 
