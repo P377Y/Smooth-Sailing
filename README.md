@@ -2,28 +2,58 @@
 
 Smooth Sailing is a lightweight, configurable sailing quality-of-life mod for Valheim 1.0, built for BepInEx + Jotunn.
 
-It improves sailing without changing the core ship experience, with configurable favorable wind, faster rowing, and increased map exploration while traveling by ship.
+It improves sailing without replacing the core ship experience, with selectable favorable-wind modes, improved rowing, and increased map exploration while traveling by ship.
 
 ## Features
 
 ### Favorable Wind
-- Forces favorable tailwind while controlling a ship at Half or Full sail.
-- Wind direction automatically follows the direction of the ship while sailing.
-- Designed to eliminate situations where unfavorable wind brings sailing to a crawl.
+
+Smooth Sailing can provide a favorable effective wind while controlling a ship at Half or Full sail.
+
+Four sailing modes are available:
+
+- **Off** - Vanilla wind behavior.
+- **Dead Astern** - Effective wind directly behind the ship.
+- **+60° Offset** - Favorable wind offset to one side of the ship.
+- **-60° Offset** - Favorable wind offset to the opposite side.
+
+The offset angle is configurable and defaults to 60°.
+
+A server administrator can cycle the modes in-game using the configured Admin Toggle Key (default: **K**):
+
+`Off -> Dead Astern -> +60° -> -60° -> Off`
+
+The selected mode is synchronized so participating clients use the same sailing behavior.
+
+### Accurate Sailing Visuals
+
+When a favorable-wind mode is active:
+
+- The physical sail responds to the effective sailing wind.
+- The circular sailing wind indicator displays the effective wind direction.
+- Positive and negative offsets appear on their corresponding sides.
+- The minimap wind arrow remains tied to Valheim's true environmental wind.
+
+This allows the sailing HUD to represent the wind actually affecting the ship while preserving the minimap's normal world-wind information.
 
 ### Improved Rowing
+
 - Configurable forward rowing speed multiplier.
 - Configurable reverse rowing speed multiplier.
 - Forward and reverse speeds can be tuned independently.
 
 ### Ship Exploration
+
 - Configurable map exploration radius multiplier while aboard a ship.
 - Makes ocean exploration and coastline mapping significantly more convenient.
 
-### Multiplayer Configuration
+### Multiplayer & Server Configuration
+
 - Gameplay settings use Jotunn synchronized AdminOnly configuration.
-- Server administrators control the gameplay settings.
-- Changes can be synchronized to connected clients.
+- Server administrators control synchronized gameplay settings.
+- Favorable-wind modes can be changed live by an administrator.
+- Selected wind modes are synchronized to participating clients.
+- Designed for dedicated-server as well as single-player use.
 
 ## Requirements
 
@@ -57,8 +87,9 @@ The mod will generate its configuration file after the game is launched.
 Enabled = true
 
 [Tailwind]
-Lock Tailwind = true
-Update Wind Indicator = true
+Tailwind Mode = DeadAstern
+Offset Angle = 60
+Admin Toggle Key = K
 
 [Exploration]
 Ship Exploration Radius Multiplier = 2
@@ -80,17 +111,38 @@ Default: `true`
 
 ### Tailwind
 
-**Lock Tailwind**
+**Tailwind Mode**
 
-Forces favorable tailwind while controlling a ship at Half or Full sail.
+Controls the effective sailing-wind mode.
 
-Default: `true`
+Available values:
 
-**Update Wind Indicator**
+- `Off`
+- `DeadAstern`
+- `PositiveOffset`
+- `NegativeOffset`
 
-Controls the wind-indicator behavior associated with Smooth Sailing.
+Default: `DeadAstern`
 
-Default: `true`
+**Offset Angle**
+
+Controls the angle used by the PositiveOffset and NegativeOffset modes.
+
+`0` represents dead astern. The default is `60` degrees.
+
+Default: `60`
+
+**Admin Toggle Key**
+
+Allows a server administrator to cycle the Tailwind Mode while in game.
+
+Default: `K`
+
+Cycle order:
+
+`Off -> DeadAstern -> PositiveOffset -> NegativeOffset -> Off`
+
+Changing modes displays the selected mode on screen.
 
 ### Exploration
 
@@ -114,6 +166,36 @@ Multiplier applied while rowing in reverse.
 
 Default: `2`
 
+## Why 60 Degrees?
+
+Valheim does not produce its maximum forward sailing force with the wind directly behind the ship.
+
+The selectable offset-wind modes in Smooth Sailing were inspired by **HelmWind by SirRomey**, which analyzed Valheim's vanilla sail-force behavior.
+
+SirRomey's analysis found peak sail efficiency at approximately **63° off dead astern**, with a 60° offset effectively reaching that peak. HelmWind estimates this produces approximately **2.5% more forward speed than sailing directly downwind**, with the tradeoff of additional lateral drift.
+
+Smooth Sailing therefore defaults its offset modes to 60°, while allowing the angle to be configured.
+
+## Credits & Inspiration
+
+Special thanks to **SirRomey**, creator of **HelmWind**, for the analysis and concept that inspired Smooth Sailing's offset-wind modes.
+
+HelmWind demonstrated the advantage of maintaining approximately a 60° favorable wind angle rather than simply forcing the wind directly astern.
+
+Smooth Sailing expands on that concept with:
+
+- Server-synchronized favorable-wind modes.
+- Dedicated-server support.
+- Administrator-only live mode cycling.
+- Both positive and negative configurable offsets.
+- Synchronized sailing behavior for participating clients.
+- Physical sail and sailing-indicator integration.
+- Preservation of Valheim's true environmental wind on the minimap.
+
+HelmWind:
+
+https://thunderstore.io/c/valheim/p/SirRomey/HelmWind/
+
 ## Multiplayer
 
 Smooth Sailing supports both single-player and multiplayer.
@@ -125,11 +207,11 @@ For multiplayer, install the mod on:
 
 Gameplay configuration is synchronized using Jotunn's AdminOnly configuration system, allowing the server administrator to control synchronized settings for all players.
 
-Some Smooth Sailing functionality is necessarily performed client-side, including map exploration and local wind-related behavior.
+Some Smooth Sailing functionality is necessarily performed client-side, including map exploration and visual presentation.
 
-Favorable-wind ship behavior is designed to remain consistent when different players take control of the ship, including situations where the active captain and the ship's network owner are different players. Favorable sail visuals are also applied across clients.
+Favorable-wind ship behavior is designed to remain consistent when different players take control of the ship, including situations where the active captain and the ship's network owner are different players. Favorable sail visuals are also applied across participating clients.
 
-Multiplayer captain switching, network ownership behavior, and sail visuals are still being actively tested.
+Multiplayer captain switching, network ownership behavior, and sail visuals continue to benefit from community testing. Bug reports are welcome.
 
 ## Reporting Bugs
 
@@ -149,6 +231,7 @@ When reporting a multiplayer or sailing issue, please include:
 - Number of players
 - Whether you were the ship captain when the problem occurred
 - Ship type and sail setting
+- Selected Smooth Sailing wind mode
 - Steps to reproduce the problem
 - Your BepInEx `LogOutput.log` when possible
 

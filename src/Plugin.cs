@@ -1,9 +1,12 @@
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
+using Jotunn;
+using Jotunn.Managers;
 using Jotunn.Utils;
 using System;
 using UnityEngine;
+using static SmoothSailing.Plugin;
 
 namespace SmoothSailing
 {
@@ -14,12 +17,22 @@ namespace SmoothSailing
     {
         public const string ModGuid = "p377y.valheim.smoothsailing";
         public const string ModName = "Smooth Sailing";
-        public const string ModVersion = "0.1.2";
+        public const string ModVersion = "0.2.0";
 
         internal static Plugin Instance;
+        internal static BepInEx.Logging.ManualLogSource ModLog;
         internal static ConfigEntry<bool> Enabled;
-        internal static ConfigEntry<bool> LockTailwind;
-        internal static ConfigEntry<bool> UpdateWindIndicator;
+        internal enum TailwindMode
+        {
+            Off = 0,
+            DeadAstern = 1,
+            PositiveOffset = 2,
+            NegativeOffset = 3
+        }
+
+        internal static ConfigEntry<TailwindMode> TailwindModeSetting;
+        internal static ConfigEntry<float> OffsetAngle;
+        internal static ConfigEntry<KeyboardShortcut> AdminToggleKey;
         internal static ConfigEntry<float> ShipExploreRadiusMultiplier;
         internal static ConfigEntry<float> ForwardRowMultiplier;
         internal static ConfigEntry<float> ReverseRowMultiplier;
@@ -29,6 +42,7 @@ namespace SmoothSailing
         private void Awake()
         {
             Instance = this;
+            ModLog = Logger;
             BindConfig();
 
             _harmony = new Harmony(ModGuid);
@@ -60,26 +74,33 @@ namespace SmoothSailing
                 )
             );
 
-            LockTailwind = Config.Bind(
+            TailwindModeSetting = Config.Bind(
                 "Tailwind",
-                "Lock Tailwind",
-                true,
+                "Tailwind Mode",
+                TailwindMode.DeadAstern,
                 new ConfigDescription(
-                    "Treat wind as directly behind the controlled ship while using half/full sail.",
+                    "Favorable-wind mode: Off, DeadAstern, PositiveOffset, or NegativeOffset.",
                     null,
                     admin
                 )
             );
 
-            UpdateWindIndicator = Config.Bind(
+            OffsetAngle = Config.Bind(
                 "Tailwind",
-                "Update Wind Indicator",
-                true,
+                "Offset Angle",
+                60f,
                 new ConfigDescription(
-                    "Make the local wind direction indicator match the forced tailwind while sailing.",
-                    null,
+                    "Wind angle used by PositiveOffset and NegativeOffset. 0 = dead astern; 60 is near peak vanilla sail efficiency.",
+                    new AcceptableValueRange<float>(0f, 90f),
                     admin
                 )
+            );
+
+            AdminToggleKey = Config.Bind(
+                "Tailwind",
+                "Admin Toggle Key",
+                new KeyboardShortcut(KeyCode.K),
+                "Local hotkey used by a server administrator to cycle Off -> DeadAstern -> PositiveOffset -> NegativeOffset."
             );
 
             ShipExploreRadiusMultiplier = Config.Bind(
@@ -116,9 +137,61 @@ namespace SmoothSailing
             );
         }
 
+
+
+        internal static string GetTailwindModeDisplay(TailwindMode mode)
+        {
+            switch (mode)
+            {
+                case TailwindMode.DeadAstern:
+                    return "Smooth Sailing: DEAD ASTERN";
+
+                case TailwindMode.PositiveOffset:
+                    return $"Smooth Sailing: OFFSET +{OffsetAngle.Value:0.#}°";
+
+                case TailwindMode.NegativeOffset:
+                    return $"Smooth Sailing: OFFSET -{OffsetAngle.Value:0.#}°";
+
+                default:
+                    return "Smooth Sailing: OFF";
+            }
+        }
+
+        internal static bool IsTailwindEnabled()
+        {
+            return Enabled.Value &&
+                   TailwindModeSetting.Value != TailwindMode.Off;
+        }
+
+        internal static float GetTailwindAngle()
+        {
+            switch (TailwindModeSetting.Value)
+            {
+                case TailwindMode.PositiveOffset:
+                    return OffsetAngle.Value;
+
+                case TailwindMode.NegativeOffset:
+                    return -OffsetAngle.Value;
+
+                default:
+                    return 0f;
+            }
+        }
+
+        internal static Vector3 GetDesiredWindDirection(Ship ship)
+        {
+            if (ship == null)
+                return Vector3.zero;
+
+            return Quaternion.AngleAxis(
+                GetTailwindAngle(),
+                ship.transform.up
+            ) * ship.transform.forward;
+        }
+
         internal static bool IsLocallyControlledSailingShip(Ship ship)
         {
-            if (!Enabled.Value || ship == null || Player.m_localPlayer == null)
+            if (!IsTailwindEnabled() || ship == null || Player.m_localPlayer == null)
                 return false;
 
             if (Player.m_localPlayer.GetControlledShip() != ship)
@@ -136,7 +209,7 @@ namespace SmoothSailing
         // to render the same favorable-wind sail orientation.
         internal static bool IsSailingShip(Ship ship)
         {
-            if (!Enabled.Value || ship == null)
+            if (!IsTailwindEnabled() || ship == null)
                 return false;
 
             Ship.Speed speed = ship.GetSpeedSetting();
@@ -147,7 +220,7 @@ namespace SmoothSailing
 
         internal static bool IsLocallyOwnedSailingShip(Ship ship)
         {
-            if (!Enabled.Value || ship == null)
+            if (!IsTailwindEnabled() || ship == null)
                 return false;
 
             ZNetView nview = ship.GetComponent<ZNetView>();
@@ -174,6 +247,140 @@ namespace SmoothSailing
     // FAVORABLE WIND - SHIP PHYSICS
     // ------------------------------------------------------------
 
+    [HarmonyPatch(typeof(Player), "Update")]
+    internal static class PlayerUpdateHotkeyPatch
+    {
+        private static bool _toggleWasDown;
+
+        private static void Postfix(Player __instance)
+        {
+            if (__instance == null || __instance != Player.m_localPlayer)
+                return;
+
+            KeyCode toggleKey = Plugin.AdminToggleKey.Value.MainKey;
+            bool keyDown = Input.GetKey(toggleKey);
+
+            if (!keyDown)
+            {
+                _toggleWasDown = false;
+                return;
+            }
+
+            if (_toggleWasDown)
+                return;
+
+            _toggleWasDown = true;
+
+            if (ZNet.instance == null)
+            {
+                ModLog.LogInfo("Smooth Sailing: ZNet.instance is null");
+                return;
+            }
+
+            bool isAdmin = SynchronizationManager.Instance.PlayerIsAdmin;
+
+
+            if (!isAdmin)
+            {
+                __instance.Message(
+                    MessageHud.MessageType.TopLeft,
+                    "Smooth Sailing: Admin only"
+                );
+                return;
+            }
+
+            TailwindMode currentMode = Plugin.TailwindModeSetting.Value;
+            TailwindMode nextMode;
+
+            switch (currentMode)
+            {
+                case TailwindMode.Off:
+                    nextMode = TailwindMode.DeadAstern;
+                    break;
+                case TailwindMode.DeadAstern:
+                    nextMode = TailwindMode.PositiveOffset;
+                    break;
+                case TailwindMode.PositiveOffset:
+                    nextMode = TailwindMode.NegativeOffset;
+                    break;
+                default:
+                    nextMode = TailwindMode.Off;
+                    break;
+            }
+
+            Plugin.TailwindModeSetting.Value = nextMode;
+
+            __instance.Message(
+                MessageHud.MessageType.TopLeft,
+                Plugin.GetTailwindModeDisplay(nextMode)
+            );
+        }
+    }
+
+    // ------------------------------------------------------------
+    // SHIP HUD WIND INDICATOR
+    // ------------------------------------------------------------
+
+    // ------------------------------------------------------------
+    // MINIMAP REAL-WIND SCOPE
+    //
+    // Let Valheim's Minimap.UpdateWindMarker run completely normally.
+    // This scope only tells our EnvMan.GetWindDir postfix not to replace
+    // the environmental wind while that exact minimap method is running.
+    // ------------------------------------------------------------
+
+    internal static class MinimapRealWindScope
+    {
+        internal static bool UpdatingWindMarker;
+    }
+
+    [HarmonyPatch(typeof(Minimap), "UpdateWindMarker")]
+    internal static class MinimapUpdateWindMarkerScopePatch
+    {
+        private static void Prefix()
+        {
+            MinimapRealWindScope.UpdatingWindMarker = true;
+        }
+
+        private static void Postfix()
+        {
+            MinimapRealWindScope.UpdatingWindMarker = false;
+        }
+
+        private static Exception Finalizer(Exception __exception)
+        {
+            MinimapRealWindScope.UpdatingWindMarker = false;
+            return __exception;
+        }
+    }
+
+
+    internal static class ShipHudWindScope
+    {
+        internal static bool UpdatingShipHud;
+    }
+
+    [HarmonyPatch(typeof(Hud), "UpdateShipHud")]
+    internal static class HudUpdateShipHudPatch
+    {
+        private static void Prefix()
+        {
+            ShipHudWindScope.UpdatingShipHud = true;
+        }
+
+        private static void Postfix()
+        {
+            ShipHudWindScope.UpdatingShipHud = false;
+        }
+
+        private static Exception Finalizer(Exception __exception)
+        {
+            // Make sure the scope cannot remain stuck on if UpdateShipHud throws.
+            ShipHudWindScope.UpdatingShipHud = false;
+            return __exception;
+        }
+    }
+
     [HarmonyPatch(typeof(Ship), nameof(Ship.GetWindAngle))]
     internal static class ShipGetWindAnglePatch
     {
@@ -182,13 +389,23 @@ namespace SmoothSailing
             ref float __result
         )
         {
-            if (!Plugin.Enabled.Value || !Plugin.LockTailwind.Value)
+            // Do not globally alter the game's wind angle. Only substitute the
+            // Smooth Sailing angle while Valheim is updating the circular ship HUD.
+            if (!ShipHudWindScope.UpdatingShipHud)
+                return;
+
+            if (!Plugin.IsTailwindEnabled())
                 return;
 
             if (Plugin.IsLocallyControlledSailingShip(__instance) ||
                 Plugin.IsLocallyOwnedSailingShip(__instance))
             {
-                __result = 0f;
+                // Propulsion and physical sail are intentionally unchanged.
+                // Circular HUD uses a 180-degree Dead Astern baseline, but its
+                // signed +/- offset must be mirrored relative to the propulsion
+                // angle: +60 -> 120 degrees, -60 -> 240 degrees.
+                float visualAngle = Plugin.GetTailwindAngle();
+                __result = Mathf.Repeat(360f - visualAngle, 360f);
             }
         }
     }
@@ -339,11 +556,8 @@ namespace SmoothSailing
             float dt
         )
         {
-            if (!Plugin.Enabled.Value ||
-                !Plugin.LockTailwind.Value)
-            {
+            if (!Plugin.IsTailwindEnabled())
                 return;
-            }
 
             if (!Plugin.IsSailingShip(__instance))
                 return;
@@ -352,7 +566,7 @@ namespace SmoothSailing
                 return;
 
             Vector3 windDir =
-                __instance.transform.forward;
+                Plugin.GetDesiredWindDirection(__instance);
 
             windDir = Vector3.Cross(
                 Vector3.Cross(
@@ -395,11 +609,13 @@ namespace SmoothSailing
             ref Vector3 __result
         )
         {
-            if (!Plugin.Enabled.Value ||
-                !Plugin.LockTailwind.Value)
-            {
+            // Minimap.UpdateWindMarker already received the real EnvMan.m_wind
+            // from the original GetWindDir(). Do not overwrite that result.
+            if (MinimapRealWindScope.UpdatingWindMarker)
                 return;
-            }
+
+            if (!Plugin.IsTailwindEnabled())
+                return;
 
             Player player =
                 Player.m_localPlayer;
@@ -413,7 +629,7 @@ namespace SmoothSailing
                 return;
 
             __result =
-                ship.transform.forward;
+                Plugin.GetDesiredWindDirection(ship);
         }
     }
 }

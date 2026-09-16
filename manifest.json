@@ -1,8 +1,8 @@
 {
   "name": "Smooth_Sailing",
-  "version_number": "0.1.2",
+  "version_number": "0.2.0",
   "website_url": "https://github.com/P377Y/Smooth-Sailing",
-  "description": "Server-synced Valheim sailing tweaks: favorable wind, larger ship exploration radius, and configurable forward/reverse rowing.",
+  "description": "Server-synced Valheim sailing tweaks with selectable favorable-wind modes, improved rowing, and increased ship exploration radius.",
   "dependencies": [
     "denikson-BepInExPack_Valheim-5.4.2350",
     "ValheimModding-Jotunn-2.30.0"
