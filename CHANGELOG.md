@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.1
+
+### Fixed
+
+- Updated ship cleanup handling for compatibility with Valheim 1.0.12.
+- Replaced the removed `Ship.OnDestroy` lifecycle hook with `Ship.OnDisable`.
+- Restored clean Smooth Sailing initialization following the latest Valheim/Jotunn update.
+
+### Changed
+
+- Added "boat" terminology to package metadata and README for improved discoverability.
+
 ## 0.3.0
 
 ### Added

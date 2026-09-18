@@ -1,6 +1,6 @@
 # Smooth Sailing
 
-Smooth Sailing is a lightweight, configurable sailing quality-of-life mod for Valheim 1.0, built for BepInEx + Jotunn.
+Smooth Sailing is a lightweight, configurable boat and sailing quality-of-life mod for Valheim 1.0, built for BepInEx + Jotunn.
 
 It improves sailing without replacing the core ship experience, with selectable favorable-wind modes, configurable sailing wind intensity, improved rowing, and increased map exploration while traveling by ship.
 

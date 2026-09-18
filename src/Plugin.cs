@@ -19,7 +19,7 @@ namespace SmoothSailing
     {
         public const string ModGuid = "p377y.valheim.smoothsailing";
         public const string ModName = "Smooth Sailing";
-        public const string ModVersion = "0.3.0";
+        public const string ModVersion = "0.3.1";
 
         internal static Plugin Instance;
         internal static BepInEx.Logging.ManualLogSource ModLog;
@@ -898,8 +898,8 @@ namespace SmoothSailing
     }
 
 
-    [HarmonyPatch(typeof(Ship), "OnDestroy")]
-    internal static class ShipOnDestroyPatch
+    [HarmonyPatch(typeof(Ship), "OnDisable")]
+    internal static class ShipOnDisablePatch
     {
         private static void Prefix(Ship __instance)
         {
