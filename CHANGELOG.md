@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2
+
+### Fixed
+
+- Fixed ships bouncing or jumping while rowing, particularly at high rowing speed multipliers.
+- Corrected rowing force handling so forward and reverse multipliers no longer affect ship buoyancy.
+- Improved rowing stability across the full configurable multiplier range.
+
 ## 0.3.1
 
 ### Fixed

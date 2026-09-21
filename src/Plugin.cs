@@ -19,7 +19,7 @@ namespace SmoothSailing
     {
         public const string ModGuid = "p377y.valheim.smoothsailing";
         public const string ModName = "Smooth Sailing";
-        public const string ModVersion = "0.3.1";
+        public const string ModVersion = "0.3.2";
 
         internal static Plugin Instance;
         internal static BepInEx.Logging.ManualLogSource ModLog;
@@ -724,15 +724,11 @@ namespace SmoothSailing
     )]
     internal static class ShipCustomFixedUpdatePatch
     {
-        private static readonly System.Reflection.FieldInfo ForceField =
-            AccessTools.Field(typeof(Ship), "m_force");
-
         private static readonly System.Reflection.FieldInfo BackwardForceField =
             AccessTools.Field(typeof(Ship), "m_backwardForce");
 
         internal sealed class State
         {
-            public float Force;
             public float BackwardForce;
             public bool Modified;
         }
@@ -760,14 +756,8 @@ namespace SmoothSailing
                 return;
             }
 
-            if (ForceField == null ||
-                BackwardForceField == null)
-            {
+            if (BackwardForceField == null)
                 return;
-            }
-
-            __state.Force =
-                (float)ForceField.GetValue(__instance);
 
             __state.BackwardForce =
                 (float)BackwardForceField.GetValue(__instance);
@@ -778,11 +768,6 @@ namespace SmoothSailing
                 speed == Ship.Speed.Slow
                     ? Plugin.ForwardRowMultiplier.Value
                     : Plugin.ReverseRowMultiplier.Value;
-
-            ForceField.SetValue(
-                __instance,
-                __state.Force * multiplier
-            );
 
             BackwardForceField.SetValue(
                 __instance,
@@ -801,11 +786,6 @@ namespace SmoothSailing
             {
                 return;
             }
-
-            ForceField?.SetValue(
-                __instance,
-                __state.Force
-            );
 
             BackwardForceField?.SetValue(
                 __instance,
