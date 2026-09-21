@@ -19,7 +19,7 @@ namespace SmoothSailing
     {
         public const string ModGuid = "p377y.valheim.smoothsailing";
         public const string ModName = "Smooth Sailing";
-        public const string ModVersion = "0.3.2";
+        public const string ModVersion = "0.3.3";
 
         internal static Plugin Instance;
         internal static BepInEx.Logging.ManualLogSource ModLog;
@@ -862,18 +862,25 @@ namespace SmoothSailing
                 __instance.transform.up
             );
 
-            Quaternion targetRotation =
-                Quaternion.LookRotation(
-                    -windDir,
-                    __instance.transform.up
-                );
+            float t = 0.5f +
+                Vector3.Dot(__instance.transform.forward, windDir) * 0.5f;
 
-            __instance.m_mastObject.transform.rotation =
-                Quaternion.RotateTowards(
-                    __instance.m_mastObject.transform.rotation,
-                    targetRotation,
-                    90f * dt
-                );
+            Vector3 sailDirection = Vector3.Lerp(
+                windDir,
+                Vector3.Normalize(windDir - __instance.transform.forward),
+                t
+            );
+
+            Quaternion targetRotation = Quaternion.LookRotation(
+                -sailDirection,
+                __instance.transform.up
+            );
+
+            __instance.m_mastObject.transform.rotation = Quaternion.RotateTowards(
+                __instance.m_mastObject.transform.rotation,
+                targetRotation,
+                30f * dt
+            );
         }
     }
 

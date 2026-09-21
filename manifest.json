@@ -1,6 +1,6 @@
 {
   "name": "Smooth_Sailing",
-  "version_number": "0.3.2",
+  "version_number": "0.3.3",
   "website_url": "https://github.com/P377Y/Smooth-Sailing",
   "description": "Server-synced Valheim boat and sailing tweaks with favorable wind modes, configurable wind intensity, improved rowing, and expanded ship exploration.",
   "dependencies": [

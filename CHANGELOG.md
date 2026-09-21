@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.3
+
+### Changed
+
+- Improved sail visual behavior to more closely preserve Valheim's native sail rotation and positioning.
+- Smooth Sailing now substitutes its effective wind direction while retaining Valheim's native sail-angle calculation and rotation speed.
+
+### Technical
+
+- Audited sail propulsion, rowing propulsion, wind intensity, ship exploration, and MagicaCloth wind handling against the current Valheim implementation.
+
 ## 0.3.2
 
 ### Fixed
