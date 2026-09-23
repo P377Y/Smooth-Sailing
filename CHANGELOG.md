@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.4 - Multiplayer Sync Improvements
+
+- Added server-authoritative synchronization for Smooth Sailing mode changes.
+- Admin hotkey changes are now sent to the server, validated, and synchronized to connected players.
+- Improved sail visual synchronization so non-controlling players should see the same favorable-wind sail orientation as the captain.
+- Added proper handling for solo and locally hosted worlds.
+- Mode-change notifications now appear after the server confirms the change.
+- Improved support for multiple actively sailing ships, with favorable wind calculated independently relative to each ship's heading.
+- Additional multiplayer testing and feedback is welcome, especially with multiple players and multiple ships sailing simultaneously.
+
 ## 0.3.3
 
 ### Changed

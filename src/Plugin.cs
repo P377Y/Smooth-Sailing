@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using static SmoothSailing.Plugin;
+using System.Collections;
 
 namespace SmoothSailing
 {
@@ -19,7 +20,7 @@ namespace SmoothSailing
     {
         public const string ModGuid = "p377y.valheim.smoothsailing";
         public const string ModName = "Smooth Sailing";
-        public const string ModVersion = "0.3.3";
+        public const string ModVersion = "0.3.4";
 
         internal static Plugin Instance;
         internal static BepInEx.Logging.ManualLogSource ModLog;
@@ -54,18 +55,113 @@ namespace SmoothSailing
 
         private Harmony _harmony;
 
+        internal static Jotunn.Entities.CustomRPC TailwindModeRPC;
+
         private void Awake()
         {
             Instance = this;
             ModLog = Logger;
             BindConfig();
 
+            TailwindModeRPC = NetworkManager.Instance.AddRPC(
+                "SmoothSailing_TailwindMode",
+                OnTailwindModeServerReceive,
+                OnTailwindModeClientReceive
+            );
+
             _harmony = new Harmony(ModGuid);
             _harmony.PatchAll();
 
             Logger.LogInfo($"{ModName} {ModVersion} loaded.");
         }
+        private static IEnumerator OnTailwindModeServerReceive(
+            long sender,
+            ZPackage package
+        )
+        {
+            if (package == null || ZNet.instance == null)
+                yield break;
 
+            int requestedValue = package.ReadInt();
+
+            if (!Enum.IsDefined(typeof(TailwindMode), requestedValue))
+            {
+                ModLog?.LogWarning(
+                    $"Rejected invalid Smooth Sailing tailwind mode {requestedValue} from peer {sender}."
+                );
+                yield break;
+            }
+
+            ZNetPeer peer = ZNet.instance.GetPeer(sender);
+
+            if (peer == null ||
+                peer.m_socket == null ||
+                !ZNet.instance.IsAdmin(peer.m_socket.GetHostName()))
+            {
+                ModLog?.LogWarning(
+                    $"Rejected Smooth Sailing tailwind mode change from non-admin peer {sender}."
+                );
+                yield break;
+            }
+
+            TailwindMode requestedMode =
+                (TailwindMode)requestedValue;
+
+            TailwindModeSetting.Value =
+                requestedMode;
+
+            ZPackage response = new ZPackage();
+            response.Write((int)requestedMode);
+
+            TailwindModeRPC.SendPackage(
+                ZNet.instance.GetPeers(),
+                response
+            );
+
+            ModLog?.LogInfo(
+                $"Tailwind mode changed to {requestedMode} by admin peer {sender}."
+            );
+
+            yield break;
+        }
+        private static IEnumerator OnTailwindModeClientReceive(
+            long sender,
+            ZPackage package
+        )
+        {
+            if (package == null)
+                yield break;
+
+            int receivedValue = package.ReadInt();
+
+            if (!Enum.IsDefined(typeof(TailwindMode), receivedValue))
+            {
+                ModLog?.LogWarning(
+                    $"Received invalid Smooth Sailing tailwind mode {receivedValue} from server."
+                );
+                yield break;
+            }
+
+            TailwindMode receivedMode =
+                (TailwindMode)receivedValue;
+
+            TailwindModeSetting.Value =
+                receivedMode;
+
+            if (Player.m_localPlayer != null)
+            {
+                Player.m_localPlayer.Message(
+                    MessageHud.MessageType.TopLeft,
+                    GetTailwindModeDisplay(receivedMode)
+                );
+            }
+
+            ModLog?.LogInfo(
+                $"Tailwind mode synchronized to {receivedMode}."
+            );
+
+            yield break;
+        }
         private void OnDestroy()
         {
             _harmony?.UnpatchSelf();
@@ -527,12 +623,42 @@ namespace SmoothSailing
                     break;
             }
 
-            Plugin.TailwindModeSetting.Value = nextMode;
+            if (ZNet.instance.IsServer())
+            {
+                // Solo/local host: there is no remote server peer.
+                // Apply the mode directly.
+                Plugin.TailwindModeSetting.Value = nextMode;
 
-            __instance.Message(
-                MessageHud.MessageType.TopLeft,
-                Plugin.GetTailwindModeDisplay(nextMode)
+                __instance.Message(
+                    MessageHud.MessageType.TopLeft,
+                    Plugin.GetTailwindModeDisplay(nextMode)
+                );
+
+                Plugin.ModLog?.LogInfo(
+                    $"Tailwind mode changed locally to {nextMode}."
+                );
+
+                return;
+            }
+
+            ZNetPeer serverPeer = ZNet.instance.GetServerPeer();
+
+            if (serverPeer == null)
+            {
+                Plugin.ModLog?.LogWarning(
+                    "Could not send tailwind mode change: server peer not found."
+                );
+                return;
+            }
+
+            ZPackage request = new ZPackage();
+            request.Write((int)nextMode);
+
+            Plugin.TailwindModeRPC.SendPackage(
+                serverPeer.m_uid,
+                request
             );
+
         }
     }
 
